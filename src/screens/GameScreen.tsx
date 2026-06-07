@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GameConfig, GameState, ResultsData } from '../types/game';
 import { GameEngine } from '../game/GameEngine';
+import { AudioEngine } from '../audio/AudioEngine';
 
 interface Props {
   config: GameConfig;
@@ -27,18 +28,21 @@ export default function GameScreen({ config, onGameOver, onMenu }: Props) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
     function resize() {
       if (!canvas) return;
       canvas.width = canvas.clientWidth;
       canvas.height = canvas.clientHeight;
     }
-
-    resize();
     window.addEventListener('resize', resize);
 
-    const engine = new GameEngine(canvas, config, handleStateUpdate, handleGameOver);
+    const audio = new AudioEngine();
+    const engine = new GameEngine(canvas, config, handleStateUpdate, handleGameOver, audio);
     engineRef.current = engine;
-    engine.start();
+
+    engine.start().catch(console.error);
 
     return () => {
       engine.stop();
@@ -49,51 +53,44 @@ export default function GameScreen({ config, onGameOver, onMenu }: Props) {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setPaused(p => !p);
-        return;
-      }
+      if (e.key === 'Escape') { setPaused(p => !p); return; }
       if (!paused && engineRef.current) {
         e.preventDefault();
         engineRef.current.handleKeyDown(e.key);
       }
     }
-
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [paused]);
 
-  const accuracy = gameState
-    ? gameState.hitNotes > 0
-      ? Math.round(
-          ((gameState.judgmentCounts.PERFECT * 1.0 +
-            gameState.judgmentCounts.GREAT * 0.667 +
-            gameState.judgmentCounts.GOOD * 0.333) /
-            Math.max(1, gameState.hitNotes + gameState.judgmentCounts.MISS)) *
-            100,
-        )
-      : 0
+  const accuracy = gameState && gameState.hitNotes > 0
+    ? Math.round(
+        ((gameState.judgmentCounts.PERFECT * 1.0 +
+          gameState.judgmentCounts.GREAT * 0.667 +
+          gameState.judgmentCounts.GOOD * 0.333) /
+          Math.max(1, gameState.hitNotes + gameState.judgmentCounts.MISS)) * 100,
+      )
     : 0;
 
-  const keyHints = config.keyCount === 4
-    ? 'D  F  J  K'
-    : 'S  D  F  ␣  J  K  L';
+  const modeLabel = config.mode === 'mode1' ? '日→' : config.mode === 'mode2' ? '→日' : '日+月';
+  const keyHints = config.keyCount === 4 ? 'D  F  J  K' : 'S  D  F  ␣  J  K  L';
 
   return (
     <div className="screen game-screen">
       <div className="game-hud">
         <div className="hud-left">
           <button className="btn btn-ghost btn-sm" onClick={onMenu}>✕</button>
-          <span className="hud-mode">
-            {config.mode === 'mode1' ? '日→' : config.mode === 'mode2' ? '→日' : '日+月'}
-          </span>
+          <span className="hud-mode">{modeLabel}</span>
+          {config.chart && (
+            <span className="hud-chart">{config.chart.name} · {config.bpm}BPM</span>
+          )}
         </div>
         <div className="hud-center">
           <span className="hud-score">{(gameState?.score ?? 0).toLocaleString()}</span>
         </div>
         <div className="hud-right">
           <span className="hud-combo">
-            {(gameState?.combo ?? 0) > 0 && `×${gameState!.combo}`}
+            {(gameState?.combo ?? 0) > 1 && `×${gameState!.combo}`}
           </span>
           <span className="hud-acc">{accuracy}%</span>
         </div>

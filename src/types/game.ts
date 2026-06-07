@@ -66,6 +66,7 @@ export interface GameConfig {
   bpm: number;
   kanjiSet: KanjiSet;
   totalNotes: number;
+  chart?: import('../charts/types').Chart;
 }
 
 export interface ResultsData {
